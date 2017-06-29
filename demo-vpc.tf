@@ -39,15 +39,25 @@ resource "aws_subnet" "subnet-public-demo" {
 }
 
 # Create private subnets to launch our instances into 
-# 10.10.0.128 - 10.50.0.255
+# 10.10.0.128 - 10.10.0.255
 resource "aws_subnet" "subnet-private-demo" {
   vpc_id            = "${aws_vpc.Demo-VPC.id}"
   availability_zone = "us-east-1a"
-  cidr_block        = "10.50.0.128/25"
+  cidr_block        = "10.10.0.128/25"
   depends_on        = ["aws_internet_gateway.igw-demo"]
 
   tags {
     Name = "subnet-private-demo"
+  }
+}
+
+resource "aws_vpc_peering_connection" "Demo-to-Build" {
+  peer_owner_id = "${var.build_owner_id}"
+  peer_vpc_id   = "${var.build_vpc_id}"
+  vpc_id        = "${aws_vpc.Demo-VPC.id}"
+
+  tags {
+    Name = "PCX-Demo-to-Build"
   }
 }
 
@@ -77,7 +87,7 @@ resource "aws_security_group" "demo-web-sg" {
   vpc_id      = "${aws_vpc.Demo-VPC.id}"
 
   tags {
-    Name = "demo-SG"
+    Name = "demo-web-SG"
   }
 
   # Inbound HTTP
@@ -106,7 +116,7 @@ resource "aws_security_group" "demo-web-sg" {
     to_port   = 22
     protocol  = "tcp"
     cidr_blocks = [
-        "${var.vpn_ip}",      # OpenVPN
+        "${var.vpn_ip}",       # OpenVPN
         "${var.office_ip}",    # Local office IP 
     ]  
   }
@@ -117,7 +127,7 @@ resource "aws_security_group" "demo-web-sg" {
     to_port   = 3389
     protocol  = "tcp"
     cidr_blocks = [
-        "${var.vpn_ip}",   # OpenVPN
+        "${var.vpn_ip}",    # OpenVPN
         "${var.office_ip}", # Local office IP
     ] 
   }
@@ -131,8 +141,8 @@ resource "aws_security_group" "demo-web-sg" {
         "172.31.0.0/16",     # Build VPC
         "10.20.0.0/24",      # Selenium VPC
         "10.10.10.0/24",     # MDC VPC
-        "${var.vpn_ip}",   # OpenVPN
-        "${var.office_ip}", # Local office IP
+        "${var.vpn_ip}",     # OpenVPN
+        "${var.office_ip}",  # Local office IP
     ]
   }
 
@@ -143,7 +153,7 @@ resource "aws_security_group" "demo-web-sg" {
     protocol  = "tcp"
     cidr_blocks = [
         "172.31.0.0/16",   # Build VPC
-        "${var.vpn_ip}", # OpenVPN 
+        "${var.vpn_ip}",   # OpenVPN 
     ]
   }
 
@@ -178,8 +188,134 @@ resource "aws_security_group" "demo-web-sg" {
     protocol    = "tcp"
     cidr_blocks = [
         "172.31.0.0/16",   # Build VPC
-        "10.10.0.0/24",    # Selenium VPC
-        "${var.vpn_ip}", # OpenVPN 
+        "10.10.0.0/24",    # Demo VPC
+        "${var.vpn_ip}",   # OpenVPN 
+    ]
+  }
+}
+
+# A security group for the web server instances
+resource "aws_security_group" "demo-db-sg" {
+  name        = "demo-db-sg"
+  description = "Security Group for Demo database Nodes"
+  vpc_id      = "${aws_vpc.Demo-VPC.id}"
+
+  tags {
+    Name = "demo-db-SG"
+  }
+
+  # Inbound HTTP
+  ingress {
+    from_port = 80
+    to_port   = 80
+    protocol  = "tcp"
+    cidr_blocks = [
+        "10.10.0.0/24"      # Demo VPC
+    ]  
+  }
+
+  # Inbound HTTPS
+  ingress {
+    from_port = 443
+    to_port   = 443
+    protocol  = "tcp"
+    cidr_blocks = [
+        "10.10.0.0/24"        # Demo VPC
+    ]  
+  }
+
+  # Inbound SSH
+  ingress {
+    from_port = 22
+    to_port   = 22
+    protocol  = "tcp"
+    cidr_blocks = [
+        "${var.vpn_ip}",       # OpenVPN
+        "${var.office_ip}",    # Local office IP 
+        "10.10.0.0/25"         # Public subnet
+    ]  
+  }
+
+  # RDP access
+  ingress {
+    from_port = 3389
+    to_port   = 3389
+    protocol  = "tcp"
+    cidr_blocks = [
+        "${var.vpn_ip}",    # OpenVPN
+        "${var.office_ip}", # Local office IP
+        "10.10.0.0/24"      # Public subnet
+    ] 
+  }
+
+  # Allow to ping
+  ingress {
+    from_port = -1
+    to_port   = -1
+    protocol  = "icmp"
+    cidr_blocks = [
+        "172.31.0.0/16",     # Build VPC
+        "10.20.0.0/24",      # Selenium VPC
+        "10.10.10.0/24",     # MDC VPC
+        "${var.vpn_ip}",     # OpenVPN
+        "${var.office_ip}",  # Local office IP
+        "10.10.0.0/24"       # Public subnet
+    ]
+  }
+
+  # WinRM
+  ingress {
+    from_port   = 5985
+    to_port     = 5986
+    protocol    = "tcp"
+    cidr_blocks = ["172.31.0.0/16"]   # Build VPC
+  }
+
+  # SQL Server
+  ingress {
+    from_port = 1433
+    to_port   = 1433
+    protocol  = "tcp"
+    cidr_blocks = [
+        "172.31.0.0/16",   # Build VPC
+        "${var.vpn_ip}",   # OpenVPN 
+        "10.10.0.0/24"     # Public subnet
+    ]
+  }
+
+  # Outbound HTTP
+  egress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["10.10.0.0/24"]
+  }
+
+  # Outbound HTTPS
+  egress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["10.10.0.0/24"]
+  }
+
+  # Outbound ping
+  egress {
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # SQL Server
+  egress {
+    from_port   = 1433
+    to_port     = 1433
+    protocol    = "tcp"
+    cidr_blocks = [
+        "172.31.0.0/16",   # Build VPC
+        "10.10.0.0/24",    # Demo VPC
+        "${var.vpn_ip}",   # OpenVPN 
     ]
   }
 }
@@ -190,15 +326,38 @@ resource "aws_security_group" "demo-web-sg" {
     key_name               = "${var.aws_key_name}"
     availability_zone      = "us-east-1a"
     subnet_id              = "${aws_subnet.subnet-public-demo.id}"
-    vpc_security_group_ids = ["${aws_security_group.yolo-sg.id}"]
+    vpc_security_group_ids = ["${aws_security_group.demo-web-sg.id}"]
     key_name               = "playground"
     user_data              = "${file("userdata.bash")}"
+    private_ip             = "${lookup(var.web_ips, count.index)}"
+    count                  = 5
  
    tags {
-     Name  = "web-server"
+     Name  = "web-server-${count.index}"
      App   = "demo"
      Env   = "web"
      Owner = "bryan"
      OS    = "ubuntu16"
+   }
+}
+
+ resource "aws_instance" "windows-db" {
+    ami                    = "${data.aws_ami.windows2016.id}"
+    instance_type          = "t2.micro"
+    key_name               = "${var.aws_key_name}"
+    availability_zone      = "us-east-1a"
+    subnet_id              = "${aws_subnet.subnet-private-demo.id}"
+    vpc_security_group_ids = ["${aws_security_group.demo-db-sg.id}"]
+    key_name               = "playground"
+    user_data              = "${file("userdata.txt")}"
+    private_ip             = "${lookup(var.db_ips, count.index)}"
+    count                  = 5
+ 
+   tags {
+     Name  = "db-server-${count.index}"
+     App   = "demo"
+     Env   = "database"
+     Owner = "bryan"
+     OS    = "windows2016"
    }
 }
