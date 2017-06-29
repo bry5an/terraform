@@ -329,7 +329,8 @@ resource "aws_security_group" "demo-db-sg" {
     vpc_security_group_ids = ["${aws_security_group.demo-web-sg.id}"]
     key_name               = "playground"
     user_data              = "${file("userdata.bash")}"
-    private_ip             = "${lookup(var.web_ips, count.index)}"
+    # private_ip             = "${lookup(var.web_ips, count.index)}"
+    private_ip             = "10.10.0.${count.index + 100}"
     count                  = 5
  
    tags {
@@ -350,7 +351,7 @@ resource "aws_security_group" "demo-db-sg" {
     vpc_security_group_ids = ["${aws_security_group.demo-db-sg.id}"]
     key_name               = "playground"
     user_data              = "${file("userdata.txt")}"
-    private_ip             = "${lookup(var.db_ips, count.index)}"
+    private_ip             = "10.10.0.${count.index + 200}"
     count                  = 5
  
    tags {
