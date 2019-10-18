@@ -31,7 +31,7 @@ data "aws_caller_identity" "aux" {
 data "terraform_remote_state" "aux" {
   backend = "s3"
   config = {
-    bucket = "kingsmen-terraform"
+    bucket = "bucket-name-terraform"
     key    = "aux-vpc/terraform.tfstate"
     region = "us-east-1"
   }
